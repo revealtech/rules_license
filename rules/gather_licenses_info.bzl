@@ -19,6 +19,7 @@ load(
     "LicenseInfo",
     "LicensesInfo",
 )
+load(":types.bzl", "types")
 
 # MARK: - Debug
 
