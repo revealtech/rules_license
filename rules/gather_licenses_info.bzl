@@ -24,7 +24,7 @@ load(":types.bzl", "types")
 # MARK: - Debug
 
 # Debugging verbosity
-_VERBOSITY = 1
+_VERBOSITY = 0
 
 def _debug(loglevel, msg):
     if _VERBOSITY > loglevel:
@@ -46,16 +46,10 @@ def _print_debug(dbg):
 
 # MARK: - gather_licenses_info
 
-_ATTRS_TO_TRAVERSE = [
-    "applicable_licenses",
-    "base",  # cc_interface_library
-    "deps",
-    "interface_roots",  # simple_cc_shared_library
-    "implementation_deps",
-    "interface_deps",  # cc_interface_library
-    "roots",  # simple_cc_shared_library
-    "srcs",
-]
+_TARGET_TYPE = "Target"
+
+def _is_target(val):
+    return type(val) == _TARGET_TYPE
 
 def _license_list_to_labels(license_list):
     if types.is_depset(license_list):
@@ -78,29 +72,31 @@ def _get_transitive_licenses_for_dep(dbg, dep, licenses, trans):
             ))
             trans.append(license_list)
 
-def _get_transitive_licenses(dbg, deps, licenses, trans):
-    if types.is_list(deps):
-        for dep in deps:
-            _get_transitive_licenses_for_dep(dbg, dep, licenses, trans)
+def _get_transitive_licenses_for_item(dbg, val, licenses, trans):
+    if not _is_target(val):
+        return
+    _get_transitive_licenses_for_dep(dbg, val, licenses, trans)
+
+def _get_transitive_licenses(dbg, val, licenses, trans):
+    if types.is_list(val):
+        for li in val:
+            _get_transitive_licenses_for_item(dbg, li, licenses, trans)
     else:
-        _get_transitive_licenses_for_dep(dbg, deps, licenses, trans)
+        _get_transitive_licenses_for_item(dbg, val, licenses, trans)
 
 def _gather_licenses_info_impl(target, ctx):
     licenses = []
     trans = []
     dbg = []
-    _add_debug(dbg, lambda: "Gathering license info from {}".format(target))
-    for attr in _ATTRS_TO_TRAVERSE:
-        if hasattr(ctx.rule.attr, attr):
-            deps = getattr(ctx.rule.attr, attr)
-            _get_transitive_licenses(dbg, deps, licenses, trans)
-    _print_debug(dbg)
+    for attr in dir(ctx.rule.attr):
+        val = getattr(ctx.rule.attr, attr)
+        _get_transitive_licenses(dbg, val, licenses, trans)
     return [LicensesInfo(licenses = depset(tuple(licenses), transitive = trans))]
 
 gather_licenses_info = aspect(
     doc = """Collects LicenseInfo providers into a single LicensesInfo provider.""",
     implementation = _gather_licenses_info_impl,
-    attr_aspects = _ATTRS_TO_TRAVERSE,
+    attr_aspects = ["*"],
     apply_to_generating_rules = True,
 )
 
