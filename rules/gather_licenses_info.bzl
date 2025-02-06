@@ -24,7 +24,7 @@ load(":types.bzl", "types")
 # MARK: - Debug
 
 # Debugging verbosity
-_VERBOSITY = 0
+_VERBOSITY = 1
 
 def _debug(loglevel, msg):
     if _VERBOSITY > loglevel:
@@ -48,8 +48,12 @@ def _print_debug(dbg):
 
 _ATTRS_TO_TRAVERSE = [
     "applicable_licenses",
+    "base",  # cc_interface_library
     "deps",
+    "interface_roots",  # simple_cc_shared_library
     "implementation_deps",
+    "interface_deps",  # cc_interface_library
+    "roots",  # simple_cc_shared_library
     "srcs",
 ]
 
@@ -60,20 +64,26 @@ def _license_list_to_labels(license_list):
         licenses = license_list
     return [li.rule for li in licenses]
 
+def _get_transitive_licenses_for_dep(dbg, dep, licenses, trans):
+    _add_debug(dbg, lambda: "  depends on {}".format(dep.label))
+    if LicenseInfo in dep:
+        license = dep[LicenseInfo]
+        _add_debug(dbg, lambda: "    with license {}".format(license.rule))
+        licenses.append(license)
+    if LicensesInfo in dep:
+        license_list = dep[LicensesInfo].licenses
+        if license_list:
+            _add_debug(dbg, lambda: "    transitively depends on: {}".format(
+                _license_list_to_labels(license_list),
+            ))
+            trans.append(license_list)
+
 def _get_transitive_licenses(dbg, deps, licenses, trans):
-    for dep in deps:
-        _add_debug(dbg, lambda: "  depends on {}".format(dep.label))
-        if LicenseInfo in dep:
-            license = dep[LicenseInfo]
-            _add_debug(dbg, lambda: "    with license {}".format(license.rule))
-            licenses.append(license)
-        if LicensesInfo in dep:
-            license_list = dep[LicensesInfo].licenses
-            if license_list:
-                _add_debug(dbg, lambda: "    transitively depends on: {}".format(
-                    _license_list_to_labels(license_list),
-                ))
-                trans.append(license_list)
+    if types.is_list(deps):
+        for dep in deps:
+            _get_transitive_licenses_for_dep(dbg, dep, licenses, trans)
+    else:
+        _get_transitive_licenses_for_dep(dbg, deps, licenses, trans)
 
 def _gather_licenses_info_impl(target, ctx):
     licenses = []
