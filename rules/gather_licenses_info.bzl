@@ -88,9 +88,11 @@ def _gather_licenses_info_impl(target, ctx):
     licenses = []
     trans = []
     dbg = []
+    _add_debug(dbg, lambda: "Gathering license info from {}".format(target))
     for attr in dir(ctx.rule.attr):
         val = getattr(ctx.rule.attr, attr)
         _get_transitive_licenses(dbg, val, licenses, trans)
+    _print_debug(dbg)
     return [LicensesInfo(licenses = depset(tuple(licenses), transitive = trans))]
 
 gather_licenses_info = aspect(
