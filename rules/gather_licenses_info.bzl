@@ -149,25 +149,48 @@ def write_licenses_info(ctx, deps, json_out):
         "conditions": {kind_conditions}
       }}"""
 
-    licenses = []
+    # Need to sort kinds by target/label
+    def _generate_kinds(license_kinds):
+        kind_by_label = {
+            str(kind.label): kind
+            for kind in license_kinds
+        }
+        kind_labels = sorted(kind_by_label.keys())
+        kinds = []
+        for kind_label in kind_labels:
+            kind = kind_by_label[kind_label]
+            kinds.append(kind_template.format(
+                kind_name = kind.name,
+                kind_path = kind.label,
+                kind_conditions = kind.conditions,
+            ))
+        return kinds
+
+    def _generate_license(license):
+        kinds = _generate_kinds(license.license_kinds)
+        return rule_template.format(
+            rule = license.rule,
+            copyright_notice = license.copyright_notice,
+            package_name = license.package_name,
+            license_text = license.license_text.path,
+            kinds = ",\n".join(kinds),
+        )
+
+    # Collect the licenses by rule
+    # Need to sort licenses by rule
+    licenses_by_rule = {}
     for dep in deps:
-        if LicensesInfo in dep:
-            for license in dep[LicensesInfo].licenses.to_list():
-                _debug(0, "  Requires license: %s" % license)
-                kinds = []
-                for kind in license.license_kinds:
-                    kinds.append(kind_template.format(
-                        kind_name = kind.name,
-                        kind_path = kind.label,
-                        kind_conditions = kind.conditions,
-                    ))
-                licenses.append(rule_template.format(
-                    rule = license.rule,
-                    copyright_notice = license.copyright_notice,
-                    package_name = license.package_name,
-                    license_text = license.license_text.path,
-                    kinds = ",\n".join(kinds),
-                ))
+        if not LicensesInfo in dep:
+            continue
+        for license in dep[LicensesInfo].licenses.to_list():
+            licenses_by_rule[str(license.rule)] = license
+
+    license_rules = sorted(licenses_by_rule.keys())
+    licenses = []
+    for license_rule in license_rules:
+        license = licenses_by_rule[license_rule]
+        licenses.append(_generate_license(license))
+
     ctx.actions.write(
         output = json_out,
         content = "[\n%s\n]\n" % ",\n".join(licenses),
